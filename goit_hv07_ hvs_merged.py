@@ -1,10 +1,10 @@
-from typing import Callable, Dict
-from datetime import datetime, timedelta
+from typing import Callable, Dict, List
+from datetime import datetime, timedelta, date
 
 class Birthday:
     def __init__(self, value):
         try:
-            self.date = datetime.strptime(value, "%d.%m.%Y")
+            self.date = datetime.strptime(value, "%d.%m.%Y").date()
         except ValueError:
             raise ValueError("Invalid date format")
 
@@ -30,19 +30,37 @@ class AddressBook:
                 return record
         return None
 
-    def get_upcoming_birthdays(self, date):
+    def get_upcoming_birthdays(self, days=7):
         upcoming_birthdays = []
+        today = date.today()
+        is_leap_year = today.year % 4 == 0 and (today.year % 100 != 0 or today.year % 400 == 0)
+        days_in_year = 366 if is_leap_year else 365
+
         for record in self.records:
-            if record.birthday and record.birthday.date.month == date.month and record.birthday.date.day >= date.day:
-                upcoming_birthdays.append(record)
+            if record.birthday:
+                birthday_this_year = record.birthday.date.replace(year=today.year)
+                if birthday_this_year < today:
+                    birthday_this_year = birthday_this_year.replace(year=today.year + 1)
+                days_until_birthday = (birthday_this_year - today).days
+                if 0 <= days_until_birthday <= days:
+                    congratulation_date = adjust_for_weekend(birthday_this_year)
+                    congratulation_date_str = congratulation_date.strftime('%d.%m.%Y')
+                    upcoming_birthdays.append({"name": record.name, "congratulation_date": congratulation_date_str})
         return upcoming_birthdays
+
+def adjust_for_weekend(birthday: date) -> date:
+    if birthday.weekday() == 5:  # Saturday
+        return birthday + timedelta(days=2)
+    elif birthday.weekday() == 6:  # Sunday
+        return birthday + timedelta(days=1)
+    return birthday
 
 def input_error(func):
     def inner(cmd, *args):
         try:
             return func(cmd, *args)
         except IndexError:
-            return print("Enter the argument for the command")
+            return "Enter the argument for the command"
         except KeyError:
             return "Contact not found"
         except ValueError:
@@ -119,10 +137,9 @@ def show_birthday(args, book: AddressBook):
 @input_error
 def birthdays(args, book: AddressBook):
     today = datetime.now().date()
-    next_week = today + timedelta(days=7)
-    upcoming_birthdays = book.get_upcoming_birthdays(next_week)
+    upcoming_birthdays = book.get_upcoming_birthdays(days=7)
     if upcoming_birthdays:
-        return "\n".join([f"{record.name}'s birthday is on {record.birthday.date.strftime('%d.%m.%Y')}." for record in upcoming_birthdays])
+        return "\n".join([f"{record['name']}'s birthday is on {record['congratulation_date']}." for record in upcoming_birthdays])
     else:
         return "No upcoming birthdays within the next week."
 
@@ -148,7 +165,8 @@ def main():
             break
         elif cmd in operations:
             result = operations[cmd](args, book)
-            print(result)
+            if result:
+                print(result)
         else:
             print("Invalid command")
 
